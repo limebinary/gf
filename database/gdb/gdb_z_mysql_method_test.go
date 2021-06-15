@@ -274,30 +274,31 @@ func Test_DB_Upadte_KeyFieldNameMapping(t *testing.T) {
 	})
 }
 
-func Test_DB_Insert_KeyFieldNameMapping_Error(t *testing.T) {
-	table := createTable()
-	defer dropTable(table)
-
-	gtest.C(t, func(t *gtest.T) {
-		type User struct {
-			Id             int
-			Passport       string
-			Password       string
-			Nickname       string
-			CreateTime     string
-			NoneExistField string
-		}
-		data := User{
-			Id:         1,
-			Passport:   "user_1",
-			Password:   "pass_1",
-			Nickname:   "name_1",
-			CreateTime: "2020-10-10 12:00:01",
-		}
-		_, err := db.Insert(table, data)
-		t.AssertNE(err, nil)
-	})
-}
+// This is no longer used as the filter feature is automatically enabled from GoFrame v1.16.0.
+//func Test_DB_Insert_KeyFieldNameMapping_Error(t *testing.T) {
+//	table := createTable()
+//	defer dropTable(table)
+//
+//	gtest.C(t, func(t *gtest.T) {
+//		type User struct {
+//			Id             int
+//			Passport       string
+//			Password       string
+//			Nickname       string
+//			CreateTime     string
+//			NoneExistField string
+//		}
+//		data := User{
+//			Id:         1,
+//			Passport:   "user_1",
+//			Password:   "pass_1",
+//			Nickname:   "name_1",
+//			CreateTime: "2020-10-10 12:00:01",
+//		}
+//		_, err := db.Insert(table, data)
+//		t.AssertNE(err, nil)
+//	})
+//}
 
 func Test_DB_InsertIgnore(t *testing.T) {
 	table := createInitTable()
@@ -328,7 +329,7 @@ func Test_DB_BatchInsert(t *testing.T) {
 	gtest.C(t, func(t *gtest.T) {
 		table := createTable()
 		defer dropTable(table)
-		r, err := db.BatchInsert(table, g.List{
+		r, err := db.Insert(table, g.List{
 			{
 				"id":          2,
 				"passport":    "t2",
@@ -356,7 +357,7 @@ func Test_DB_BatchInsert(t *testing.T) {
 		table := createTable()
 		defer dropTable(table)
 		// []interface{}
-		r, err := db.BatchInsert(table, g.Slice{
+		r, err := db.Insert(table, g.Slice{
 			g.Map{
 				"id":          2,
 				"passport":    "t2",
@@ -381,7 +382,7 @@ func Test_DB_BatchInsert(t *testing.T) {
 	gtest.C(t, func(t *gtest.T) {
 		table := createTable()
 		defer dropTable(table)
-		result, err := db.BatchInsert(table, g.Map{
+		result, err := db.Insert(table, g.Map{
 			"id":          1,
 			"passport":    "t1",
 			"password":    "p1",
@@ -415,7 +416,7 @@ func Test_DB_BatchInsert_Struct(t *testing.T) {
 			NickName:   "T1",
 			CreateTime: gtime.Now(),
 		}
-		result, err := db.BatchInsert(table, user)
+		result, err := db.Insert(table, user)
 		t.AssertNil(err)
 		n, _ := result.RowsAffected()
 		t.Assert(n, 1)
@@ -1282,7 +1283,7 @@ func Test_DB_Prefix(t *testing.T) {
 			})
 		}
 
-		result, err := db.BatchInsert(name, array.Slice())
+		result, err := db.Insert(name, array.Slice())
 		t.AssertNil(err)
 
 		n, e := result.RowsAffected()

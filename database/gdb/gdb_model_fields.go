@@ -72,6 +72,7 @@ func (m *Model) FieldsEx(fieldNamesOrMapStruct ...interface{}) *Model {
 
 // Filter marks filtering the fields which does not exist in the fields of the operated table.
 // Note that this function supports only single table operations.
+// Deprecated, filter feature is automatically enabled from GoFrame v1.16.0, it is so no longer used.
 func (m *Model) Filter() *Model {
 	if gstr.Contains(m.tables, " ") {
 		panic("function Filter supports only single table operations")
@@ -113,7 +114,7 @@ func (m *Model) GetFieldsStr(prefix ...string) string {
 		}
 		newFields += prefixStr + k
 	}
-	newFields = m.db.QuoteString(newFields)
+	newFields = m.db.GetCore().QuoteString(newFields)
 	return newFields
 }
 
@@ -157,7 +158,7 @@ func (m *Model) GetFieldsExStr(fields string, prefix ...string) string {
 		}
 		newFields += prefixStr + k
 	}
-	newFields = m.db.QuoteString(newFields)
+	newFields = m.db.GetCore().QuoteString(newFields)
 	return newFields
 }
 
