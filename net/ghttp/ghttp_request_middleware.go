@@ -7,6 +7,7 @@
 package ghttp
 
 import (
+	"github.com/gogf/gf/errors/gcode"
 	"github.com/gogf/gf/errors/gerror"
 	"net/http"
 	"reflect"
@@ -105,7 +106,7 @@ func (m *middleware) Next() {
 				// Create a new error with stack info.
 				// Note that there's a skip pointing the start stacktrace
 				// of the real error point.
-				m.request.error = gerror.WrapCodeSkip(gerror.CodeInternalError, 1, exception, "")
+				m.request.error = gerror.WrapCodeSkip(gcode.CodeInternalError, 1, exception, "")
 			}
 			m.request.Response.WriteStatus(http.StatusInternalServerError, exception)
 			loop = false
@@ -153,13 +154,17 @@ func (m *middleware) callHandlerFunc(funcInfo handlerFuncInfo) {
 			switch len(results) {
 			case 1:
 				if !results[0].IsNil() {
-					m.request.handlerResponse.Error = results[0].Interface().(error)
+					if err, ok := results[0].Interface().(error); ok {
+						m.request.handlerResponse.Error = err
+					}
 				}
 
 			case 2:
 				m.request.handlerResponse.Object = results[0].Interface()
 				if !results[1].IsNil() {
-					m.request.handlerResponse.Error = results[1].Interface().(error)
+					if err, ok := results[1].Interface().(error); ok {
+						m.request.handlerResponse.Error = err
+					}
 				}
 			}
 		}

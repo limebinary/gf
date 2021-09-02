@@ -7,6 +7,7 @@
 package glog
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/fatih/color"
@@ -77,11 +78,11 @@ func NewWithWriter(writer io.Writer) *Logger {
 // Clone returns a new logger, which is the clone the current logger.
 // It's commonly used for chaining operations.
 func (l *Logger) Clone() *Logger {
-	logger := New()
-	logger.ctx = l.ctx
-	logger.config = l.config
-	logger.parent = l
-	return logger
+	newLogger := New()
+	newLogger.ctx = l.ctx
+	newLogger.config = l.config
+	newLogger.parent = l
+	return newLogger
 }
 
 // getFilePath returns the logging file path.
@@ -115,12 +116,13 @@ func (l *Logger) print(ctx context.Context, level int, values ...interface{}) {
 	var (
 		now   = time.Now()
 		input = &HandlerInput{
-			logger: l,
-			index:  -1,
-			Ctx:    ctx,
-			Time:   now,
-			Color:  defaultLevelColor[level],
-			Level:  level,
+			Logger:       l,
+			Buffer:       bytes.NewBuffer(nil),
+			Ctx:          ctx,
+			Time:         now,
+			Color:        defaultLevelColor[level],
+			Level:        level,
+			handlerIndex: -1,
 		}
 	)
 	if l.config.HeaderPrint {
@@ -152,13 +154,17 @@ func (l *Logger) print(ctx context.Context, level int, values ...interface{}) {
 		if l.config.Flags&(F_FILE_LONG|F_FILE_SHORT|F_CALLER_FN) > 0 {
 			callerFnName, path, line := gdebug.CallerWithFilter(pathFilterKey, l.config.StSkip)
 			if l.config.Flags&F_CALLER_FN > 0 {
-				input.CallerFunc = fmt.Sprintf(`[%s]`, callerFnName)
+				if len(callerFnName) > 2 {
+					input.CallerFunc = fmt.Sprintf(`[%s]`, callerFnName)
+				}
 			}
-			if l.config.Flags&F_FILE_LONG > 0 {
-				input.CallerPath = fmt.Sprintf(`%s:%d:`, path, line)
-			}
-			if l.config.Flags&F_FILE_SHORT > 0 {
-				input.CallerPath = fmt.Sprintf(`%s:%d:`, gfile.Basename(path), line)
+			if line >= 0 && len(path) > 1 {
+				if l.config.Flags&F_FILE_LONG > 0 {
+					input.CallerPath = fmt.Sprintf(`%s:%d:`, path, line)
+				}
+				if l.config.Flags&F_FILE_SHORT > 0 {
+					input.CallerPath = fmt.Sprintf(`%s:%d:`, gfile.Basename(path), line)
+				}
 			}
 		}
 		// Prefix.
@@ -171,26 +177,25 @@ func (l *Logger) print(ctx context.Context, level int, values ...interface{}) {
 		// Tracing values.
 		spanCtx := trace.SpanContextFromContext(ctx)
 		if traceId := spanCtx.TraceID(); traceId.IsValid() {
-			input.CtxStr = "{" + traceId.String() + "}"
+			input.CtxStr = traceId.String()
 		}
 		// Context values.
 		if len(l.config.CtxKeys) > 0 {
-			ctxStr := ""
 			for _, ctxKey := range l.config.CtxKeys {
 				var ctxValue interface{}
 				if ctxValue = ctx.Value(ctxKey); ctxValue == nil {
 					ctxValue = ctx.Value(gctx.StrKey(gconv.String(ctxKey)))
 				}
 				if ctxValue != nil {
-					if ctxStr != "" {
-						ctxStr += ", "
+					if input.CtxStr != "" {
+						input.CtxStr += ", "
 					}
-					ctxStr += fmt.Sprintf("%s: %+v", ctxKey, ctxValue)
+					input.CtxStr += gconv.String(ctxValue)
 				}
 			}
-			if ctxStr != "" {
-				input.CtxStr += "{" + ctxStr + "}"
-			}
+		}
+		if input.CtxStr != "" {
+			input.CtxStr = "{" + input.CtxStr + "}"
 		}
 	}
 	var tempStr string
@@ -224,51 +229,68 @@ func (l *Logger) print(ctx context.Context, level int, values ...interface{}) {
 	}
 }
 
-// doPrint outputs the logging content according configuration.
-func (l *Logger) doPrint(ctx context.Context, input *HandlerInput) {
+// doDefaultPrint outputs the logging content according configuration.
+func (l *Logger) doDefaultPrint(ctx context.Context, input *HandlerInput) *bytes.Buffer {
+	var buffer *bytes.Buffer
 	if l.config.Writer == nil {
-		// Output content to disk file.
-		if l.config.Path != "" {
-			l.printToFile(ctx, input.Time, input)
-		}
 		// Allow output to stdout?
 		if l.config.StdoutPrint {
-			l.printToStdout(ctx, input)
+			if buf := l.printToStdout(ctx, input); buf != nil {
+				buffer = buf
+			}
+		}
+
+		// Output content to disk file.
+		if l.config.Path != "" {
+			if buf := l.printToFile(ctx, input.Time, input); buf != nil {
+				buffer = buf
+			}
 		}
 	} else {
 		// Output to custom writer.
-		l.printToWriter(ctx, input)
+		if buf := l.printToWriter(ctx, input); buf != nil {
+			buffer = buf
+		}
 	}
+	return buffer
 }
 
 // printToWriter writes buffer to writer.
-func (l *Logger) printToWriter(ctx context.Context, input *HandlerInput) {
+func (l *Logger) printToWriter(ctx context.Context, input *HandlerInput) *bytes.Buffer {
 	if l.config.Writer != nil {
 		var (
-			buffer = input.getBuffer(l.config.WriterColorEnable)
+			buffer = input.getRealBuffer(l.config.WriterColorEnable)
 		)
 		if _, err := l.config.Writer.Write(buffer.Bytes()); err != nil {
 			intlog.Error(ctx, err)
 		}
+		return buffer
 	}
+	return nil
 }
 
 // printToStdout outputs logging content to stdout.
-func (l *Logger) printToStdout(ctx context.Context, input *HandlerInput) {
+func (l *Logger) printToStdout(ctx context.Context, input *HandlerInput) *bytes.Buffer {
 	if l.config.StdoutPrint {
+		var (
+			buffer = input.getRealBuffer(true)
+		)
 		// This will lose color in Windows os system.
-		// if _, err := os.Stdout.Write(input.getBuffer(true).Bytes()); err != nil {
+		// if _, err := os.Stdout.Write(input.getRealBuffer(true).Bytes()); err != nil {
+
 		// This will print color in Windows os system.
-		if _, err := fmt.Fprintf(color.Output, input.getBuffer(true).String()); err != nil {
+		if _, err := fmt.Fprint(color.Output, buffer.String()); err != nil {
 			intlog.Error(ctx, err)
 		}
+		return buffer
 	}
+	return nil
 }
 
 // printToFile outputs logging content to disk file.
-func (l *Logger) printToFile(ctx context.Context, t time.Time, input *HandlerInput) {
+func (l *Logger) printToFile(ctx context.Context, t time.Time, in *HandlerInput) *bytes.Buffer {
 	var (
-		buffer        = input.getBuffer(l.config.WriterColorEnable)
+		buffer        = in.getRealBuffer(l.config.WriterColorEnable)
 		logFilePath   = l.getFilePath(t)
 		memoryLockKey = memoryLockPrefixForPrintingToFile + logFilePath
 	)
@@ -292,6 +314,7 @@ func (l *Logger) printToFile(ctx context.Context, t time.Time, input *HandlerInp
 			intlog.Error(ctx, err)
 		}
 	}
+	return buffer
 }
 
 // getFilePointer retrieves and returns a file pointer from file pool.
@@ -361,4 +384,9 @@ func (l *Logger) GetStack(skip ...int) string {
 		filters = append(filters, l.config.StFilter)
 	}
 	return gdebug.StackWithFilters(filters, stackSkip)
+}
+
+// GetConfig returns the configuration of current Logger.
+func (l *Logger) GetConfig() Config {
+	return l.config
 }

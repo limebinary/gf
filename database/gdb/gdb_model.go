@@ -73,6 +73,7 @@ const (
 	whereHolderOperatorWhere = 1
 	whereHolderOperatorAnd   = 2
 	whereHolderOperatorOr    = 3
+	defaultFields            = "*"
 )
 
 // Table is alias of Core.Model.
@@ -103,9 +104,14 @@ func (c *Core) Model(tableNameQueryOrStruct ...interface{}) *Model {
 	if len(tableNameQueryOrStruct) > 1 {
 		conditionStr := gconv.String(tableNameQueryOrStruct[0])
 		if gstr.Contains(conditionStr, "?") {
-			tableStr, extraArgs = formatWhere(
-				c.db, conditionStr, tableNameQueryOrStruct[1:], false, "", "",
-			)
+			tableStr, extraArgs = formatWhere(c.db, formatWhereInput{
+				Where:     conditionStr,
+				Args:      tableNameQueryOrStruct[1:],
+				OmitNil:   false,
+				OmitEmpty: false,
+				Schema:    "",
+				Table:     "",
+			})
 		}
 	}
 	// Normal model creation.
@@ -130,7 +136,7 @@ func (c *Core) Model(tableNameQueryOrStruct ...interface{}) *Model {
 		db:         c.db,
 		tablesInit: tableStr,
 		tables:     tableStr,
-		fields:     "*",
+		fields:     defaultFields,
 		start:      -1,
 		offset:     -1,
 		filter:     true,

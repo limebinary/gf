@@ -11,6 +11,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/gogf/gf/errors/gcode"
+	"github.com/gogf/gf/internal/intlog"
 	"reflect"
 	"strings"
 
@@ -34,10 +36,6 @@ func (c *Core) GetCore() *Core {
 // a global or package variable for long using.
 func (c *Core) Ctx(ctx context.Context) DB {
 	if ctx == nil {
-		return c.db
-	}
-	// It is already set context in previous chaining operation.
-	if c.ctx != nil {
 		return c.db
 	}
 	ctx = context.WithValue(ctx, ctxStrictKeyName, 1)
@@ -89,9 +87,31 @@ func (c *Core) GetCtxTimeout(timeoutType int, ctx context.Context) (context.Cont
 			return context.WithTimeout(ctx, c.db.GetConfig().PrepareTimeout)
 		}
 	default:
-		panic(gerror.NewCodef(gerror.CodeInvalidParameter, "invalid context timeout type: %d", timeoutType))
+		panic(gerror.NewCodef(gcode.CodeInvalidParameter, "invalid context timeout type: %d", timeoutType))
 	}
 	return ctx, func() {}
+}
+
+// Close closes the database and prevents new queries from starting.
+// Close then waits for all queries that have started processing on the server
+// to finish.
+//
+// It is rare to Close a DB, as the DB handle is meant to be
+// long-lived and shared between many goroutines.
+func (c *Core) Close(ctx context.Context) (err error) {
+	c.links.LockFunc(func(m map[string]interface{}) {
+		for k, v := range m {
+			if db, ok := v.(*sql.DB); ok {
+				err = db.Close()
+				intlog.Printf(ctx, `close link: %s, err: %v`, k, err)
+				if err != nil {
+					return
+				}
+				delete(m, k)
+			}
+		}
+	})
+	return
 }
 
 // Master creates and returns a connection from master node if master-slave configured.
@@ -552,7 +572,7 @@ func (c *Core) DoUpdate(ctx context.Context, link Link, table string, data inter
 		updates = gconv.String(data)
 	}
 	if len(updates) == 0 {
-		return nil, gerror.NewCode(gerror.CodeMissingParameter, "data cannot be empty")
+		return nil, gerror.NewCode(gcode.CodeMissingParameter, "data cannot be empty")
 	}
 	if len(params) > 0 {
 		args = append(params, args...)

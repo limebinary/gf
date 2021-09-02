@@ -9,6 +9,7 @@ package gdb
 import (
 	"database/sql"
 	"github.com/gogf/gf/container/gset"
+	"github.com/gogf/gf/errors/gcode"
 	"reflect"
 
 	"github.com/gogf/gf/errors/gerror"
@@ -82,8 +83,10 @@ func (m *Model) Data(data ...interface{}) *Model {
 					list[i] = ConvertDataForTableRecord(rv.Index(i).Interface())
 				}
 				model.data = list
+
 			case reflect.Map:
 				model.data = ConvertDataForTableRecord(data[0])
+
 			case reflect.Struct:
 				if v, ok := data[0].(apiInterfaces); ok {
 					var (
@@ -97,6 +100,7 @@ func (m *Model) Data(data ...interface{}) *Model {
 				} else {
 					model.data = ConvertDataForTableRecord(data[0])
 				}
+
 			default:
 				model.data = data[0]
 			}
@@ -210,7 +214,7 @@ func (m *Model) doInsertWithOption(insertOption int) (result sql.Result, err err
 		}
 	}()
 	if m.data == nil {
-		return nil, gerror.NewCode(gerror.CodeMissingParameter, "inserting into table with empty data")
+		return nil, gerror.NewCode(gcode.CodeMissingParameter, "inserting into table with empty data")
 	}
 	var (
 		list            List
@@ -274,12 +278,12 @@ func (m *Model) doInsertWithOption(insertOption int) (result sql.Result, err err
 			}
 
 		default:
-			return result, gerror.NewCodef(gerror.CodeInvalidParameter, "unsupported list type:%v", kind)
+			return result, gerror.NewCodef(gcode.CodeInvalidParameter, "unsupported list type:%v", kind)
 		}
 	}
 
 	if len(list) < 1 {
-		return result, gerror.NewCode(gerror.CodeMissingParameter, "data list cannot be empty")
+		return result, gerror.NewCode(gcode.CodeMissingParameter, "data list cannot be empty")
 	}
 
 	// Automatic handling for creating/updating time.
@@ -364,7 +368,7 @@ func (m *Model) formatDoInsertOption(insertOption int, columnNames []string) (op
 
 				default:
 					return option, gerror.NewCodef(
-						gerror.CodeInvalidParameter,
+						gcode.CodeInvalidParameter,
 						`unsupported OnDuplicate parameter type "%s"`,
 						reflect.TypeOf(m.onDuplicate),
 					)
@@ -408,7 +412,7 @@ func (m *Model) formatOnDuplicateExKeys(onDuplicateEx interface{}) ([]string, er
 
 	default:
 		return nil, gerror.NewCodef(
-			gerror.CodeInvalidParameter,
+			gcode.CodeInvalidParameter,
 			`unsupported OnDuplicateEx parameter type "%s"`,
 			reflect.TypeOf(onDuplicateEx),
 		)
