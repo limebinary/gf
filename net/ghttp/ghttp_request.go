@@ -13,31 +13,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogf/gf/internal/intlog"
-	"github.com/gogf/gf/os/gres"
-	"github.com/gogf/gf/os/gsession"
-	"github.com/gogf/gf/os/gview"
-	"github.com/gogf/gf/util/guid"
-
-	"github.com/gogf/gf/os/gtime"
-	"github.com/gogf/gf/text/gregex"
+	"github.com/gogf/gf/v2/internal/intlog"
+	"github.com/gogf/gf/v2/os/gres"
+	"github.com/gogf/gf/v2/os/gsession"
+	"github.com/gogf/gf/v2/os/gtime"
+	"github.com/gogf/gf/v2/os/gview"
+	"github.com/gogf/gf/v2/text/gregex"
+	"github.com/gogf/gf/v2/util/guid"
 )
 
 // Request is the context object for a request.
 type Request struct {
 	*http.Request
-	Server          *Server                // Server.
-	Cookie          *Cookie                // Cookie.
-	Session         *gsession.Session      // Session.
-	Response        *Response              // Corresponding Response of this request.
-	Router          *Router                // Matched Router for this request. Note that it's not available in HOOK handler.
-	EnterTime       int64                  // Request starting time in microseconds.
-	LeaveTime       int64                  // Request ending time in microseconds.
-	Middleware      *middleware            // Middleware manager.
-	StaticFile      *staticFile            // Static file object for static file serving.
+	Server     *Server           // Server.
+	Cookie     *Cookie           // Cookie.
+	Session    *gsession.Session // Session.
+	Response   *Response         // Corresponding Response of this request.
+	Router     *Router           // Matched Router for this request. Note that it's not available in HOOK handler.
+	EnterTime  int64             // Request starting time in microseconds.
+	LeaveTime  int64             // Request ending time in microseconds.
+	Middleware *middleware       // Middleware manager.
+	StaticFile *staticFile       // Static file object for static file serving.
+
+	// =================================================================================================================
+	// Private attributes for internal usage purpose.
+	// =================================================================================================================
+
 	context         context.Context        // Custom context for internal usage purpose.
 	handlers        []*handlerParsedItem   // All matched handlers containing handler, hook and middleware for this request.
-	handlerResponse handlerResponse        // Handler response object and its error value.
+	handlerResponse handlerResponse        // Handler response object and its error value for Request/Response handler.
 	hasHookHandler  bool                   // A bool marking whether there's hook handler in the handlers for performance purpose.
 	hasServeHandler bool                   // A bool marking whether there's serving handler in the handlers for performance purpose.
 	parsedQuery     bool                   // A bool marking whether the GET parameters parsed.
@@ -49,13 +53,14 @@ type Request struct {
 	formMap         map[string]interface{} // Form parameters map, which is nil if there's no form data from client.
 	bodyMap         map[string]interface{} // Body parameters map, which might be nil if there're no body content.
 	error           error                  // Current executing error of the request.
-	exit            bool                   // A bool marking whether current request is exited.
+	exitAll         bool                   // A bool marking whether current request is exited.
 	parsedHost      string                 // The parsed host name for current host used by GetHost function.
 	clientIp        string                 // The parsed client ip for current host used by GetClientIp function.
 	bodyContent     []byte                 // Request body content.
 	isFileRequest   bool                   // A bool marking whether current request is file serving.
 	viewObject      *gview.View            // Custom template view engine object for this response.
 	viewParams      gview.Params           // Custom template view variables for this response.
+	originUrlPath   string                 // Original URL path that passed from client.
 }
 
 type handlerResponse struct {
@@ -73,10 +78,11 @@ type staticFile struct {
 // newRequest creates and returns a new request object.
 func newRequest(s *Server, r *http.Request, w http.ResponseWriter) *Request {
 	request := &Request{
-		Server:    s,
-		Request:   r,
-		Response:  newResponse(s, w),
-		EnterTime: gtime.TimestampMilli(),
+		Server:        s,
+		Request:       r,
+		Response:      newResponse(s, w),
+		EnterTime:     gtime.TimestampMilli(),
+		originUrlPath: r.URL.Path,
 	}
 	request.Cookie = GetCookie(request)
 	request.Session = s.sessionManager.New(
@@ -98,6 +104,17 @@ func newRequest(s *Server, r *http.Request, w http.ResponseWriter) *Request {
 	})
 	if err != nil {
 		panic(err)
+	}
+	// Remove char '/' in the tail of URI.
+	if request.URL.Path != "/" {
+		for len(request.URL.Path) > 0 && request.URL.Path[len(request.URL.Path)-1] == '/' {
+			request.URL.Path = request.URL.Path[:len(request.URL.Path)-1]
+		}
+	}
+
+	// Default URI value if it's empty.
+	if request.URL.Path == "" {
+		request.URL.Path = "/"
 	}
 	return request
 }
@@ -122,7 +139,7 @@ func (r *Request) Exit() {
 
 // ExitAll exits executing of current and following HTTP handlers.
 func (r *Request) ExitAll() {
-	r.exit = true
+	r.exitAll = true
 	panic(exceptionExitAll)
 }
 
@@ -133,10 +150,10 @@ func (r *Request) ExitHook() {
 
 // IsExited checks and returns whether current request is exited.
 func (r *Request) IsExited() bool {
-	return r.exit
+	return r.exitAll
 }
 
-// GetHeader retrieves and returns the header value with given <key>.
+// GetHeader retrieves and returns the header value with given `key`.
 func (r *Request) GetHeader(key string) string {
 	return r.Header.Get(key)
 }
@@ -199,7 +216,7 @@ func (r *Request) GetClientIp() string {
 func (r *Request) GetRemoteIp() string {
 	array, _ := gregex.MatchString(`(.+):(\d+)`, r.RemoteAddr)
 	if len(array) > 1 {
-		return array[1]
+		return strings.Trim(array[1], "[]")
 	}
 	return r.RemoteAddr
 }

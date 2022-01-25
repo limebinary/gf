@@ -9,12 +9,12 @@ package gvar_test
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/gogf/gf/util/gconv"
 	"testing"
 	"time"
 
-	"github.com/gogf/gf/container/gvar"
-	"github.com/gogf/gf/test/gtest"
+	"github.com/gogf/gf/v2/container/gvar"
+	"github.com/gogf/gf/v2/test/gtest"
+	"github.com/gogf/gf/v2/util/gconv"
 )
 
 func Test_Set(t *testing.T) {
@@ -28,10 +28,7 @@ func Test_Set(t *testing.T) {
 		v.Set(123.456)
 		t.Assert(v.Val(), 123.456)
 	})
-	gtest.C(t, func(t *gtest.T) {
-		v := gvar.Create(123.456)
-		t.Assert(v.Val(), 123.456)
-	})
+
 	gtest.C(t, func(t *gtest.T) {
 		objOne := gvar.New("old", true)
 		objOneOld, _ := objOne.Set("new").(string)
