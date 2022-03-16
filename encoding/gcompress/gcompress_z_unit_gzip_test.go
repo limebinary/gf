@@ -44,19 +44,19 @@ func Test_Gzip_UnGzip(t *testing.T) {
 
 func Test_Gzip_UnGzip_File(t *testing.T) {
 	srcPath := gdebug.TestDataPath("gzip", "file.txt")
-	dstPath1 := gfile.TempDir(gtime.TimestampNanoStr(), "gzip.zip")
-	dstPath2 := gfile.TempDir(gtime.TimestampNanoStr(), "file.txt")
+	dstPath1 := gfile.Temp(gtime.TimestampNanoStr(), "gzip.zip")
+	dstPath2 := gfile.Temp(gtime.TimestampNanoStr(), "file.txt")
 
 	// Compress.
 	gtest.C(t, func(t *gtest.T) {
 		err := gcompress.GzipFile(srcPath, dstPath1, 9)
-		t.Assert(err, nil)
+		t.AssertNil(err)
 		defer gfile.Remove(dstPath1)
 		t.Assert(gfile.Exists(dstPath1), true)
 
 		// Decompress.
 		err = gcompress.UnGzipFile(dstPath1, dstPath2)
-		t.Assert(err, nil)
+		t.AssertNil(err)
 		defer gfile.Remove(dstPath2)
 		t.Assert(gfile.Exists(dstPath2), true)
 
